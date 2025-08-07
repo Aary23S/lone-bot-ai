@@ -1,4 +1,3 @@
-//ECHO is on.
 // ✅ backend/middleware/authMiddleware.js
 
 const jwt = require('jsonwebtoken');
@@ -10,7 +9,10 @@ const authenticate = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
+
+    // ✅ Explicitly assign userId for consistency
+    req.user = { userId: decoded.userId || decoded.id };
+
     next();
   } catch (error) {
     return res.status(403).json({ message: 'Invalid or expired token' });
