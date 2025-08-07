@@ -44,14 +44,35 @@
 //   console.log(`🚀 Server listening on port ${PORT}`);
 // });
 
-const app = require("./app");
-const dotenv = require("dotenv");
-const cors = require('cors');
-app.use(cors());
+// const app = require("./app");
+// const dotenv = require("dotenv");
+// const cors = require('cors');
+// app.use(cors());
 
-dotenv.config();
+// dotenv.config();
+// const PORT = process.env.PORT || 5000;
+
+// app.listen(PORT, () => {
+//   console.log(`🚀 Server running on port ${PORT}`);
+// });
+
+// ✅ backend/server.js
+
+// ✅ File: backend/server.js
+
+const app = require('./app');
+const { sequelize } = require('./models');
+
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+(async () => {
+  try {
+    await sequelize.sync({ alter: true });
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running at http://localhost:${PORT}`);
+    });
+  } catch (err) {
+    console.error('❌ Failed to start server:', err.message);
+  }
+})();
+

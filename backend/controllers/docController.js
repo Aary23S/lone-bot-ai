@@ -1,16 +1,18 @@
-// ✅ backend/controllers/docController.js
+// ✅ Replaced uploadDocuments to support truncation strategy
 
 const extractUtil = require('../utils/extractUtil');
 const { queryLocalAI } = require('../utils/aiClient');
 const Document = require('../models/document');
 const { Chat } = require('../models');
 
-
-// Replace the whole uploadDocuments function with this:
-exports.uploadDocuments = async (req, res) => {
+const uploadDocuments = async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user?.userId;
     const files = req.files;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User ID missing from token' });
+    }
 
     if (!files || files.length === 0) {
       return res.status(400).json({ message: 'No files uploaded' });
@@ -22,61 +24,60 @@ exports.uploadDocuments = async (req, res) => {
       try {
         const extractedText = await extractUtil.extractTextFromFile(file.path);
 
+        // ✅ Truncate to 100k characters (Option A)
+        const truncatedText = extractedText?.substring(0, 100000) || '';
+
         const newDoc = await Document.create({
           filename: file.originalname,
           filepath: file.path,
           uploaded_by: userId,
           uploaded_at: new Date(),
-          extracted_text: extractedText || '',
+          extracted_text: truncatedText,
         });
 
         uploadedDocs.push(newDoc);
 
-      } catch (error) {
-        console.error(`❌ Failed to extract text from ${file.originalname}:`, error.message);
-        // Don't throw here — allow other files to continue
+      } catch (fileErr) {
+        console.error(`❌ Error processing ${file.originalname}:`, fileErr);
       }
     }
 
     if (uploadedDocs.length === 0) {
-      return res.status(500).json({ message: 'All file uploads failed. Please check file formats or size limits.' });
+      return res.status(500).json({ message: '❌ All uploads failed. Check file type or content.' });
     }
 
-    res.status(201).json({
+    return res.status(201).json({
       message: uploadedDocs.length === files.length
         ? '✅ All files uploaded successfully'
-        : `⚠️ Only ${uploadedDocs.length} out of ${files.length} files uploaded successfully.`,
+        : `⚠️ Only ${uploadedDocs.length} of ${files.length} files uploaded.`,
       files: uploadedDocs,
     });
 
   } catch (err) {
-    console.error('❌ Upload error:', err.message);
-    res.status(500).json({ message: 'Internal server error during file upload' });
+    console.error('❌ Upload Controller Error:', err.stack);
+    res.status(500).json({
+      message: '❌ Internal server error during upload',
+      error: err.message,
+    });
   }
 };
 
-
-
-
-// ✅ backend/controllers/docController.js
-
-exports.askQuestion = async (req, res) => {
-  console.log("ASK QUESTION ROUTE HIT");
-  console.log("Request body:", req.body);
-  console.log("User ID:", req.user.userId);
-
+const askQuestion = async (req, res) => {
   try {
     const { question, documentIds } = req.body;
-    const userId = req.user.userId; // Authenticated user from JWT
+    const userId = req.user?.userId;
 
-    if (!question) {
-      return res.status(400).json({ message: 'Question is required' });
+    if (!userId) {
+      return res.status(401).json({ message: 'Missing user ID in token' });
     }
 
-    let documents;
+    if (!question || typeof question !== 'string') {
+      return res.status(400).json({ message: 'Question must be provided as a string' });
+    }
 
-    // If documentIds are provided, restrict to only user's documents
-    if (documentIds && documentIds.length > 0) {
+    let documents = [];
+
+    if (documentIds && Array.isArray(documentIds) && documentIds.length > 0) {
       documents = await Document.findAll({
         where: {
           id: documentIds,
@@ -84,11 +85,8 @@ exports.askQuestion = async (req, res) => {
         },
       });
     } else {
-      // Otherwise, fetch all documents uploaded by this user
       documents = await Document.findAll({
-        where: {
-          uploaded_by: userId,
-        },
+        where: { uploaded_by: userId },
       });
     }
 
@@ -96,15 +94,22 @@ exports.askQuestion = async (req, res) => {
       return res.status(404).json({ message: 'No documents found for this user' });
     }
 
-    const combinedText = documents.map((doc) => doc.extracted_text || '').join('\n');
+    const combinedText = documents.map(doc => doc.extracted_text || '').join('\n').trim();
 
-    if (!combinedText) {
-      return res.status(400).json({ message: 'No extracted content found in user\'s documents.' });
+    if (!combinedText || combinedText.length === 0) {
+      return res.status(400).json({ message: 'Extracted text is empty for all documents' });
     }
+
+    console.log('📤 Sending to AI model...');
+    console.log('📜 Text length:', combinedText.length);
+    console.log('❓ Question:', question);
 
     const answer = await queryLocalAI(question, combinedText);
 
-    // Save chat to DB
+    if (!answer || typeof answer !== 'string') {
+      return res.status(500).json({ message: 'AI did not return a valid string answer' });
+    }
+
     await Chat.create({
       question,
       answer,
@@ -113,32 +118,30 @@ exports.askQuestion = async (req, res) => {
       asked_at: new Date(),
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       question,
       answer,
       usedDocuments: documents.map((doc) => doc.filename),
     });
-  }
-  catch (error) {
-  console.error('❌ FULL ERROR IN /ask');
-  console.error(error); // <-- shows stack trace and full cause
-  res.status(500).json({
-    message: 'Error processing the question.',
-    error: error.message,
-    details: error.stack
-  });
-}
 
+  } catch (err) {
+    console.error('❌ /ask error:', err);
+    return res.status(500).json({
+      message: 'Error processing the question.',
+      error: err.message,
+      stack: err.stack,
+    });
+  }
 };
 
-// ✅ Get all chat history for the logged-in user
-exports.getChatHistory = async (req, res) => {
+
+const getChatHistory = async (req, res) => {
   try {
     const userId = req.user.userId;
 
     const chats = await Chat.findAll({
       where: { user_id: userId },
-      order: [['asked_at', 'DESC']], // latest first
+      order: [['asked_at', 'DESC']],
     });
 
     res.status(200).json({
@@ -149,4 +152,11 @@ exports.getChatHistory = async (req, res) => {
     console.error('Error fetching chat history:', error);
     res.status(500).json({ message: 'Failed to fetch chat history' });
   }
+};
+
+// ✅ FINAL EXPORT
+module.exports = {
+  uploadDocuments,
+  askQuestion,
+  getChatHistory,
 };

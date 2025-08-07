@@ -7,32 +7,29 @@ const User = require('../models/User');
 
 const router = express.Router();
 
-// // 🔐 Register User
-
+// 🔐 Register User
 router.post('/register', async (req, res) => {
   const { username, email, password } = req.body;
   try {
     if (!username || !email || !password) {
       return res.status(400).json({ error: 'All fields are required' });
     }
-  
+
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = await User.create({ username, email, password: hashedPassword });
-  
-    res.status(201).json({ message: 'User registered successfully' });    
+    await User.create({ username, email, password: hashedPassword });
+
+    res.status(201).json({ message: 'User registered successfully' });
   } catch (err) {
     if (err.name === 'SequelizeValidationError' || err.name === 'SequelizeUniqueConstraintError') {
-      // Return the first model error message
       const messages = err.errors.map(e => e.message);
       return res.status(400).json({ errors: messages });
     }
     console.error('Error in registration:', err);
-    return res.status(500).json({ error: 'Internal server error' });    
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
 });
 
-//  Login User
+// 🔑 Login User
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
