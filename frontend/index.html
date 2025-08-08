@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Lone Bot AI</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background: #333;
+      color: white;
+      text-align: center;
+      padding: 1rem;
+    }
+    .container {
+      max-width: 800px;
+      margin: auto;
+      padding: 1rem;
+    }
+    section {
+      display: none;
+      background: white;
+      padding: 1rem;
+      margin-top: 1rem;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .visible {
+      display: block;
+    }
+    input, button, textarea {
+      width: 100%;
+      padding: 0.6rem;
+      margin: 0.5rem 0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .loader {
+      display: none;
+      width: 40px;
+      height: 40px;
+      border: 5px solid #f3f3f3;
+      border-top: 5px solid #007bff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: auto;
+    }
+    .loader.visible {
+      display: block;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .chat-message {
+      padding: 0.5rem;
+      margin-bottom: 0.5rem;
+      border-radius: 10px;
+      max-width: 70%;
+      clear: both;
+    }
+    .user-message {
+      background-color: #dcf8c6;
+      float: right;
+      text-align: right;
+    }
+    .ai-message {
+      background-color: #f1f0f0;
+      float: left;
+      text-align: left;
+    }
+    .chat-box {
+      height: 400px;
+      overflow-y: auto;
+      margin-bottom: 1rem;
+      border: 1px solid #ccc;
+      padding: 1rem;
+      background: #fafafa;
+      display: flex;
+      flex-direction: column;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Lone Bot AI</h1>
+  </header>
+
+  <div class="container">
+    <div id="loader" class="loader"></div>
+
+    <section id="registerSection" class="visible">
+      <h2>Register</h2>
+      <input id="regUsername" placeholder="Username" />
+      <input id="regEmail" type="email" placeholder="Email" />
+      <input id="regPassword" type="password" placeholder="Password" />
+      <button onclick="register()">Register</button>
+      <button onclick="showSection('loginSection')">Already have an account? Login</button>
+    </section>
+
+    <section id="loginSection">
+      <h2>Login</h2>
+      <input id="loginEmail" type="email" placeholder="Email" />
+      <input id="loginPassword" type="password" placeholder="Password" />
+      <button onclick="login()">Login</button>
+      <button onclick="showSection('registerSection')">Back to Register</button>
+    </section>
+
+    <section id="uploadSection">
+      <h2>Upload Documents</h2>
+      <input id="documents" type="file" multiple />
+      <button onclick="uploadFiles()">Upload</button>
+      <button onclick="goToChat()">Go to Chat</button>
+      <button onclick="logout()">Logout</button>
+    </section>
+
+    <section id="chatSection">
+      <h2>Ask Questions</h2>
+      <div class="chat-box" id="chatBox"></div>
+      <input id="questionInput" placeholder="Type your question..." />
+      <button onclick="askQuestion()">Ask</button>
+      <button onclick="showSection('uploadSection')">Back to Upload</button>
+      <button onclick="logout()">Logout</button>
+    </section>
+  </div>
+
+  <script>
+    const API = 'http://localhost:5000';
+    const loader = document.getElementById('loader');
+
+    function showLoader(show = true) {
+      loader.classList.toggle('visible', show);
+    }
+
+    function showSection(id) {
+      if (!localStorage.getItem('token') && (id === 'uploadSection' || id === 'chatSection')) {
+        alert("Please login first.");
+        id = 'loginSection';
+      }
+      document.querySelectorAll('section').forEach(sec => sec.classList.remove('visible'));
+      document.getElementById(id).classList.add('visible');
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      document.getElementById('chatBox').innerHTML = '';
+      showSection('loginSection');
+    }
+
+    async function register() {
+      const username = document.getElementById('regUsername').value.trim();
+      const email = document.getElementById('regEmail').value.trim();
+      const password = document.getElementById('regPassword').value.trim();
+      if (!username || !email || !password) return alert("All fields required");
+
+      showLoader(true);
+      try {
+        const res = await fetch(`${API}/api/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, email, password })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          alert(data.message || "Registered successfully. Please login.");
+          showSection('loginSection');
+        } else {
+          alert(data.message || 'Registration failed');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Network error during registration.');
+      }
+      showLoader(false);
+    }
+
+    async function login() {
+      const email = document.getElementById('loginEmail').value.trim();
+      const password = document.getElementById('loginPassword').value.trim();
+      if (!email || !password) return alert("All fields required");
+
+      showLoader(true);
+      try {
+        const res = await fetch(`${API}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (res.ok && data.token) {
+          localStorage.setItem('token', data.token);
+          showSection('uploadSection');
+        } else {
+          alert(data.message || 'Login failed');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Network error during login.');
+      }
+      showLoader(false);
+    }
+
+    async function uploadFiles() {
+      const files = document.getElementById('documents').files;
+      if (!files.length) return alert("Select files to upload");
+
+      const formData = new FormData();
+      for (let file of files) formData.append('documents', file);
+
+      showLoader(true);
+      // try {
+        const res = await fetch(`${API}/api/upload`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: formData
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          alert(data.message || "Upload successful");
+          goToChat(); // Go to chat section after successful upload
+        } else {
+          // Try to get error message from server, otherwise show status text
+          let errorMessage = `Upload failed with status: ${res.status}`;
+          try {
+            const errorData = await res.json();
+            errorMessage = errorData.message || JSON.stringify(errorData);
+          } catch (e) {
+            errorMessage = await res.text();
+          }
+          alert(errorMessage);
+        }
+      // } catch (err) {
+      //   console.error('Upload fetch error:', err);
+      //   alert('An error occurred during upload. This could be a network issue or a server problem. Please check the console for details.');
+      // }
+      // showLoader(false);
+    }
+
+    function addMessageToChat(message, type) {
+        const chatBox = document.getElementById('chatBox');
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `chat-message ${type === 'user' ? 'user-message' : 'ai-message'}`;
+        msgDiv.textContent = message;
+        chatBox.appendChild(msgDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    async function goToChat() {
+      showSection('chatSection');
+      const chatBox = document.getElementById('chatBox');
+      chatBox.innerHTML = ''; // Clear previous messages
+
+      showLoader(true);
+      try {
+        const res = await fetch(`${API}/api/upload/history`, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        });
+        if (res.ok) {
+          const history = await res.json();
+          // Assuming history is an array like [{role: 'user', content: '...'}, {role: 'assistant', content: '...'}]
+          history.forEach(msg => {
+            const type = msg.role === 'user' ? 'user' : 'ai';
+            addMessageToChat(msg.content, type);
+          });
+        } else {
+            const data = await res.json();
+            console.error('Failed to fetch history:', data.message);
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Could not fetch chat history.');
+      }
+      showLoader(false);
+    }
+
+    async function askQuestion() {
+      const questionInput = document.getElementById('questionInput');
+      const question = questionInput.value.trim();
+      if (!question) return;
+
+      addMessageToChat(question, 'user');
+      questionInput.value = ''; // Clear input after sending
+
+      showLoader(true);
+      try {
+        const res = await fetch(`${API}/api/upload/ask`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({ question })
+        });
+        const data = await res.json();
+        addMessageToChat(data.answer || "No response from AI.", 'ai');
+      } catch (err) {
+        console.error(err);
+        addMessageToChat("Error: Could not get a response.", 'ai');
+      }
+      showLoader(false);
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        const active = document.querySelector('section.visible');
+        if (!active) return;
+
+        // Prevent default action for inputs to avoid form submission
+        if (document.activeElement.tagName === 'INPUT') {
+            e.preventDefault();
+        }
+
+        if (active.id === 'loginSection') login();
+        if (active.id === 'registerSection') register();
+        if (active.id === 'chatSection') askQuestion();
+      }
+    });
+
+    window.onload = () => {
+      const token = localStorage.getItem('token');
+      if (token) showSection('uploadSection');
+      else showSection('registerSection');
+    }
+  </script>
+</body>
+</html>
