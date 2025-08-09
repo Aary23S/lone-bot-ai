@@ -1,78 +1,60 @@
-// ✅ File: backend/server.js
-
-// ✅ backend/server.js
-
-// const app = require('./app');
-// const PORT = process.env.PORT || 5000;
-// const sequelize = require('./utils/database');
-
-// // ✅ Import models to register them with Sequelize
-// require('./models'); // This registers User, Document, Chat etc.
-
-// // ✅ Sync all models before starting server
-// sequelize.sync().then(() => {
-//   console.log('✅ Database synced');
-
-//   app.listen(PORT, () => {
-//     console.log(`🚀 Server running on http://localhost:${PORT}`);
-//   });
-// }).catch((err) => {
-//   console.error('❌ Failed to sync database:', err);
-// });
-// const express = require("express");
-// const cors = require("cors");
-// const dotenv = require("dotenv");
-// const authRoutes = require("./routes/authRoutes");
-// const docRoutes = require("./routes/docRoutes");
+// const express = require('express');
+// const app = express();
+// const cors = require('cors');
+// const dotenv = require('dotenv');
+// const { sequelize } = require('./models');
 
 // dotenv.config();
-// const app = express();
-// const PORT = process.env.PORT || 5000;
-
 // app.use(cors());
 // app.use(express.json());
-// app.use(express.urlencoded({ extended: true }));
 
-// // Mount API routes under `/api`
-// app.use("/api/auth", authRoutes);
-// app.use("/api", docRoutes); // This includes /upload, /ask, etc.
+// // Routes here...
+// app.use('/api/auth', require('./routes/authRoutes'));
+// app.use('/api/upload', docRoutes);
 
-// // Health check
-// app.get("/", (req, res) => res.send("✅ Lone Bot AI Backend Running"));
-
-// app.listen(PORT, () => {
-//   console.log(`🚀 Server listening on port ${PORT}`);
-// });
-
-// const app = require("./app");
-// const dotenv = require("dotenv");
-// const cors = require('cors');
-// app.use(cors());
-
-// dotenv.config();
-// const PORT = process.env.PORT || 5000;
-
-// app.listen(PORT, () => {
-//   console.log(`🚀 Server running on port ${PORT}`);
-// });
-
-// ✅ backend/server.js
-
-// ✅ File: backend/server.js
-
-const app = require('./app');
+// sequelize.sync({ force: true }) // or force: false
+//   .then(() => {
+//     console.log('✅ Database synced successfully');
+//     const PORT = process.env.PORT || 5000;
+//     app.listen(PORT, () => {
+//       console.log(`🚀 Server running on http://localhost:${PORT}`);
+//     });
+//   })
+//   .catch((err) => {
+//     console.error('❌ Failed to start server:', err);
+//   });
+const express = require('express');
+const app = express();
+const cors = require('cors');
+const dotenv = require('dotenv');
 const { sequelize } = require('./models');
 
-const PORT = process.env.PORT || 5000;
+// ✅ Load environment variables
+dotenv.config();
 
-(async () => {
-  try {
-    await sequelize.sync({ alter: true });
+// ✅ Middlewares
+app.use(cors());
+app.use(express.json());
+
+
+// ✅ Import routes
+const authRoutes = require('./routes/authRoutes');
+const docRoutes = require('./routes/docRoutes'); // 👈 You forgot this
+
+// ✅ Register routes
+app.use('/api/auth', authRoutes);
+app.use('/api/upload', docRoutes); // Now works
+app.use('/api/admin', require('./routes/adminRoutes'));
+
+// ✅ Database sync and server start
+sequelize.sync({ force: false }) // change to false so it won't drop tables
+  .then(() => {
+    console.log('✅ Database synced successfully');
+    const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => {
-      console.log(`🚀 Server running at http://localhost:${PORT}`);
+      console.log(`🚀 Server running on http://localhost:${PORT}`);
     });
-  } catch (err) {
-    console.error('❌ Failed to start server:', err.message);
-  }
-})();
-
+  })
+  .catch((err) => {
+    console.error('❌ Failed to start server:', err);
+  });

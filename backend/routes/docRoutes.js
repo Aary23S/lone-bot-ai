@@ -1,17 +1,16 @@
-// ✅ backend/routes/docRoutes.js
-// ✅ backend/routes/docRoutes.js
-
 const express = require('express');
 const router = express.Router();
-const docController = require('../controllers/docController');
-const authMiddleware = require('../middleware/authMiddleware');
-
-// ✅ Import already configured multer middleware
 const upload = require('../utils/storageUtil');
+const docController = require('../controllers/docController');
+const authenticate = require('../middleware/authMiddleware');
 
-// ✅ Routes
-router.post('/', authMiddleware, upload.array('documents'), docController.uploadDocuments);
-router.post('/ask', authMiddleware, docController.askQuestion);
-router.get('/history', authMiddleware, docController.getChatHistory);
+// ✅ Upload documents (POST)
+router.post('/', authenticate, upload.array('documents', 15), docController.uploadDocuments);
+
+// ✅ Ask a question
+router.post('/ask', authenticate, docController.askQuestion);
+
+// ✅ Chat history
+router.get('/history', authenticate, docController.getChatHistory);
 
 module.exports = router;

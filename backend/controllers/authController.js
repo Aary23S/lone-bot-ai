@@ -1,58 +1,31 @@
 // ✅ backend/controllers/authController.js
 
-// const bcrypt = require('bcrypt');
-// const jwt = require('jsonwebtoken');
-// const User = require('../models/User');
-
-// // Register
-// exports.register = async (req, res) => {
-//   try {
-//     const { username, email, password } = req.body;
-
-//     const existingUser = await User.findOne({ where: { email } });
-//     if (existingUser) {
-//       return res.status(400).json({ message: 'Email already in use' });
-//     }
-
-//     const hashedPassword = await bcrypt.hash(password, 10);
-//     const newUser = await User.create({
-//       username,
-//       email,
-//       password: hashedPassword,
-//     });
-
-//     res.status(201).json({ message: 'User registered successfully', user: newUser });
-//   } catch (error) {
-//     console.error('Registration error:', error);
-//     res.status(500).json({ message: 'Internal server error' });
-//   }
-// };
-
-// // Login
-// exports.login = async (req, res) => {
-//   try {
-//     const { email, password } = req.body;
-
-//     const user = await User.findOne({ where: { email } });
-//     if (!user) return res.status(404).json({ error: 'User not found' });
-
-//     const isMatch = await bcrypt.compare(password, user.password);
-//     if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
-
-//     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-
-//     res.json({ message: 'Login successful', token });
-//   } catch (error) {
-//     console.error('Login error:', error);
-//     res.status(500).json({ message: 'Internal server error' });
-//   }
-// };
-
-// ✅ backend/controllers/authController.js
-
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { User } = require('../models');
+
+const encryptPassword = (plainPassword) => {
+  const cipher = crypto.createCipheriv(
+    'aes-256-ctr',
+    Buffer.from(process.env.ADMIN_ENCRYPT_KEY), // 32 chars key
+    Buffer.alloc(16, 0) // 16 bytes IV
+  );
+  let encrypted = cipher.update(plainPassword, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return encrypted;
+};
+
+const decryptPassword = (encryptedPassword) => {
+  const decipher = crypto.createDecipheriv(
+    'aes-256-ctr',
+    Buffer.from(process.env.ADMIN_ENCRYPT_KEY),
+    Buffer.alloc(16, 0)
+  );
+  let decrypted = decipher.update(encryptedPassword, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
+};
 
 // ✅ Register Controller
 exports.register = async (req, res) => {
@@ -67,12 +40,15 @@ exports.register = async (req, res) => {
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
+    // Encrypt plain password
+    const encryptedPassword = encryptPassword(password);
 
     // Create user
     const newUser = await User.create({
       username,
       email,
       password: hashedPassword,
+      plain_password: encryptedPassword
     });
 
     res.status(201).json({
@@ -119,5 +95,19 @@ exports.login = async (req, res) => {
   } catch (err) {
     console.error('❌ Login Error:', err.message);
     res.status(500).json({ message: 'Login failed', error: err.message });
+  }
+};
+
+// ✅ Admin: Get decrypted password
+exports.getUserPassword = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findByPk(id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const decrypted = decryptPassword(user.plain_password);
+    res.status(200).json({ username: user.username, email: user.email, password: decrypted });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to retrieve password', error: err.message });
   }
 };
