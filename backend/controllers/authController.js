@@ -27,11 +27,15 @@ const decryptPassword = (encryptedPassword) => {
   return decrypted;
 };
 
-// ✅ Register Controller
+// ✅ Register Controller (fixed)
 exports.register = async (req, res) => {
   const { username, email, password } = req.body;
 
   try {
+    if (!username || !email || !password) {
+      return res.status(400).json({ message: 'All fields (username, email, password) are required' });
+    }
+
     // Check if user already exists
     const existing = await User.findOne({ where: { email } });
     if (existing) {
@@ -40,8 +44,19 @@ exports.register = async (req, res) => {
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
+
     // Encrypt plain password
-    const encryptedPassword = encryptPassword(password);
+    let encryptedPassword;
+    try {
+      encryptedPassword = encryptPassword(password);
+    } catch (err) {
+      console.error("❌ Password encryption failed:", err.message);
+      return res.status(500).json({ message: 'Password encryption failed' });
+    }
+
+    if (!encryptedPassword) {
+      return res.status(500).json({ message: 'Encryption returned empty value' });
+    }
 
     // Create user
     const newUser = await User.create({
@@ -65,6 +80,7 @@ exports.register = async (req, res) => {
     res.status(500).json({ message: 'Registration failed', error: err.message });
   }
 };
+
 
 // ✅ Login Controller
 exports.login = async (req, res) => {
