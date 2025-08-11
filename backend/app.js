@@ -16,4 +16,3 @@ app.use('/api/upload', docRoutes);     // => /api/upload, /api/upload/ask
 app.use('/uploads', express.static('uploads')); // serve uploaded files
 
 module.exports = app;
-
