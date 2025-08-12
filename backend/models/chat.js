@@ -7,7 +7,8 @@ const Chat = sequelize.define('Chat', {
   user_id: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: {
+    references: 
+    {
       model: 'Users', // ✅ Table name must match
       key: 'id',
     },
