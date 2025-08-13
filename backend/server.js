@@ -1,60 +1,24 @@
-// const express = require('express');
-// const app = express();
-// const cors = require('cors');
-// const dotenv = require('dotenv');
-// const { sequelize } = require('./models');
+// backend/server.js
+require('dotenv').config();
+const app = require('./app');
+const sequelize = require('./utils/database');
 
-// dotenv.config();
-// app.use(cors());
-// app.use(express.json());
+const PORT = process.env.PORT || 5000;
 
-// // Routes here...
-// app.use('/api/auth', require('./routes/authRoutes'));
-// app.use('/api/upload', docRoutes);
+console.log('🟡 Starting Lone Bot AI backend...');
 
-// sequelize.sync({ force: true }) // or force: false
-//   .then(() => {
-//     console.log('✅ Database synced successfully');
-//     const PORT = process.env.PORT || 5000;
-//     app.listen(PORT, () => {
-//       console.log(`🚀 Server running on http://localhost:${PORT}`);
-//     });
-//   })
-//   .catch((err) => {
-//     console.error('❌ Failed to start server:', err);
-//   });
-const express = require('express');
-const app = express();
-const cors = require('cors');
-const dotenv = require('dotenv');
-const { sequelize } = require('./models');
-
-// ✅ Load environment variables
-dotenv.config();
-
-// ✅ Middlewares
-app.use(cors());
-app.use(express.json());
-
-
-// ✅ Import routes
-const authRoutes = require('./routes/authRoutes');
-const docRoutes = require('./routes/docRoutes'); // 👈 You forgot this
-
-// ✅ Register routes
-app.use('/api/auth', authRoutes);
-app.use('/api/upload', docRoutes); // Now works
-app.use('/api/admin', require('./routes/adminRoutes'));
-
-// ✅ Database sync and server start
-sequelize.sync({ force: false }) // change to false so it won't drop tables
+sequelize.authenticate()
+  .then(() => {
+    console.log('🔌 Database connection OK');
+    return sequelize.sync({ alter: true }); // safe in dev: updates schema without dropping
+  })
   .then(() => {
     console.log('✅ Database synced successfully');
-    const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
     });
   })
   .catch((err) => {
-    console.error('❌ Failed to start server:', err);
+    console.error('❌ Could not start server - DB connection error:', err.message || err);
+    process.exit(1);
   });

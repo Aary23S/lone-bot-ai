@@ -75,31 +75,38 @@ const askQuestion = async (req, res) => {
       return res.status(400).json({ message: 'Question must be provided as a string' });
     }
 
+    // ✅ Prefer context from relevanceGuard if available
+    let combinedText = req.docContext;
+    let usedDocuments = req.usedDocuments || [];
     let documents = [];
 
-    if (documentIds && Array.isArray(documentIds) && documentIds.length > 0) {
-      documents = await Document.findAll({
-        where: {
-          id: documentIds,
-          uploaded_by: userId,
-        },
-      });
-    } else {
-      documents = await Document.findAll({
-        where: { uploaded_by: userId },
-      });
-    }
+    // If relevanceGuard didn't set docContext, fallback to fetching from DB
+    if (!combinedText) {
+      const whereClause = (documentIds && Array.isArray(documentIds) && documentIds.length > 0)
+        ? { id: documentIds, uploaded_by: userId }
+        : { uploaded_by: userId };
 
-    if (!documents || documents.length === 0) {
-      return res.status(404).json({ message: 'No documents found for this user' });
-    }
+      documents = await Document.findAll({ where: whereClause, order: [['uploaded_at', 'DESC']] });
 
-    const combinedText = documents.map(doc => doc.extracted_text || '').join('\n').trim();
+
+      if (!documents || documents.length === 0) {
+        return res.status(404).json({ message: 'No documents found for this user' });
+      }
+
+      combinedText = documents.map(doc => doc.extracted_text || '').join('\n').trim();
+      usedDocuments = documents.map(doc => doc.filename);
+    }
 
     if (!combinedText || combinedText.length === 0) {
       return res.status(400).json({ message: 'Extracted text is empty for all documents' });
     }
 
+    // Ambiguity flag from relevanceGuard
+    if (req.relevanceAmbiguous) {
+      console.log('⚠ Ambiguous relevance detected — merged top docs for context.');
+    }
+
+    // 🔹 This part kept exactly as your original logging
     console.log('📤 Sending to AI model...');
     console.log('📜 Text length:', combinedText.length);
     console.log('❓ Question:', question);
@@ -110,18 +117,23 @@ const askQuestion = async (req, res) => {
       return res.status(500).json({ message: 'AI did not return a valid string answer' });
     }
 
+    // Append disclaimer & sources for storage
+    const disclaimer = '\n\n---\nAnswer is based only on the provided documents. If unsure, consult the original documents.';
+    const answerWithSources = `${answer}${disclaimer}\n\nSources: ${usedDocuments.join(', ')}`;
+
     await Chat.create({
       question,
-      answer,
+      answer: answerWithSources, // save the annotated version
       user_id: userId,
-      used_documents: documents.map((doc) => doc.filename).join(', '),
+      used_documents: usedDocuments.join(', '),
       asked_at: new Date(),
     });
 
     return res.status(200).json({
       question,
-      answer,
-      usedDocuments: documents.map((doc) => doc.filename),
+      answer,               // return plain answer for UI
+      answerWithSources,    // annotated version if needed
+      usedDocuments,
     });
 
   } catch (err) {
@@ -133,6 +145,8 @@ const askQuestion = async (req, res) => {
     });
   }
 };
+
+
 
 
 const getChatHistory = async (req, res) => {
