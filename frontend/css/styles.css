@@ -427,3 +427,61 @@ body {
 .mt-2 { margin-top: 1rem; }
 .mt-3 { margin-top: 1.5rem; }
 .hidden { display: none; }
+
+/* === Added Styles for UI Improvements === */
+
+/* Narrower login/register cards for a more professional look */
+.auth-card {
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+/* Professional looking user email in header */
+.email-badge {
+  background: rgba(255, 255, 255, 0.15);
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-right: 10px;
+  display: inline-block;
+}
+
+/* Clear Chat button inside chat header */
+.chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+#clearHistoryBtn {
+  background-color: var(--error);
+  color: white;
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+#clearHistoryBtn:hover {
+  background-color: #dc2626;
+}
+
+/* Dynamic textarea resizing in chat */
+.dynamic-textarea {
+  overflow-y: hidden;
+  resize: none;
+  min-height: 44px;
+  max-height: 200px;
+}
+
+/* Disabled send button appearance */
+#sendBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Make chat section input look more spacious */
+.chat-input {
+  font-size: 1rem;
+  line-height: 1.4;
+}

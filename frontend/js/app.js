@@ -1,7 +1,7 @@
 // frontend/js/app.js
 const API = 'http://localhost:5000/api'; // base API
 const loader = document.getElementById('loader');
-
+const sendBtn = document.getElementById('sendBtn');
 // Globals
 let docsMapByFilename = {};
 let selectedDocIds = [];
@@ -37,6 +37,7 @@ function updateUserInfo() {
   const userInfo = document.getElementById('userInfo');
   if (email && userEmailEl && userInfo) {
     userEmailEl.textContent = email;
+    userEmailEl.classList.add('email-badge');
     userInfo.classList.remove('hidden');
   }
 }
@@ -294,11 +295,13 @@ async function askQuestion() {
 
     const data = await res.json();
     addMessageToChat(data.answer || data.message || 'No response from AI.', 'ai');
+    if (sendBtn) sendBtn.disabled = true;
   } catch (err) {
     console.error('❌ Ask error:', err);
     addMessageToChat('Error: Could not get a response.', 'ai');
   } finally {
     showLoader(false);
+    if (sendBtn) sendBtn.disabled = false;
   }
 }
 
@@ -354,13 +357,16 @@ function goToChat() {
 }
 
 // UX helpers
+// UX helpers
 const textarea = document.getElementById('questionInput');
 if (textarea) {
-  textarea.addEventListener('input', function() {
+  textarea.classList.add('dynamic-textarea'); // apply style from CSS
+  textarea.addEventListener('input', function () {
     this.style.height = 'auto';
     this.style.height = Math.min(this.scrollHeight, 200) + 'px';
   });
 }
+
 
 // Enter-key handling for submit (no Shift)
 document.addEventListener('keydown', function(e) {
@@ -404,26 +410,26 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-document.getElementById('clearHistoryBtn').addEventListener('click', async () => {
-  if (!confirm('Are you sure you want to clear all your previous chat history?')) return;
+// === Added === Clear chat history button
+const clearBtn = document.getElementById('clearHistoryBtn');
+if (clearBtn) {
+  clearBtn.addEventListener('click', async () => {
+    if (!confirm('Are you sure you want to clear all your previous chat history?')) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API}/upload/history`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      alert(data.message || 'History cleared');
+      const chatBox = document.getElementById('chatBox');
+      if (chatBox) chatBox.innerHTML = '';
+    } catch (err) {
+      console.error('Error clearing history:', err);
+      alert('Failed to clear history.');
+    }
+  });
+}
 
-  try {
-    const token = localStorage.getItem('token');
-    const res = await fetch('http://localhost:5000/api/upload/history', {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    const data = await res.json();
-    alert(data.message);
-
-    // Clear chat window UI after deletion
-    document.getElementById('chatWindow').innerHTML = '';
-  } catch (err) {
-    console.error('Error clearing history:', err);
-    alert('Failed to clear history.');
-  }
-});
 
