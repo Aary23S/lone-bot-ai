@@ -56,4 +56,21 @@ router.get('/docs', authenticate, async (req, res) => {
   }
 });
 
+// ✅ Clear chat history for logged in user
+router.delete('/history', authenticate, async (req, res) => {
+  try {
+    const Chat = require('../models/chat'); // Assuming your chat table model is named 'Chat'
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+    await Chat.destroy({ where: { user_id: userId } });
+
+    res.status(200).json({ message: 'Chat history cleared successfully' });
+  } catch (err) {
+    console.error('DELETE /history error:', err);
+    res.status(500).json({ message: 'Failed to clear chat history', error: err.message });
+  }
+});
+
+
 module.exports = router;

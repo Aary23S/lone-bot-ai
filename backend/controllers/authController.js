@@ -1,15 +1,12 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const User = require('../models/User'); // use the direct model to avoid index export differences
+const User = require('../models/User'); // direct model import
 
-// Optional AES-256-CTR encryption of the raw password (for your admin view).
+// Optional AES-256-CTR encryption for storing plain password (admin use)
 function tryEncrypt(plain) {
   const key = process.env.ADMIN_ENCRYPT_KEY;
-  if (!key || key.length !== 32) {
-    // Soft-fail: don't store, but don't crash either.
-    return null;
-  }
+  if (!key || key.length !== 32) return null; // Soft-fail
   try {
     const cipher = crypto.createCipheriv('aes-256-ctr', Buffer.from(key), Buffer.alloc(16, 0));
     let enc = cipher.update(plain, 'utf8', 'hex');
@@ -24,25 +21,27 @@ function tryEncrypt(plain) {
 // ✅ POST /api/auth/register
 exports.register = async (req, res) => {
   try {
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({ message: 'Invalid request body' });
+    }
+
     let { username, email, password } = req.body || {};
+    username = username ? String(username).trim() : '';
+    email = email ? String(email).trim().toLowerCase() : '';
+    password = password ? String(password) : '';
+
     if (!username || !email || !password) {
       return res.status(400).json({ message: 'All fields (username, email, password) are required' });
     }
 
-    // Normalize email
-    email = String(email).trim().toLowerCase();
-
-    // Check existing
+    // Check if email already exists
     const exists = await User.findOne({ where: { email } });
     if (exists) {
       return res.status(409).json({ message: 'User already exists' });
     }
 
-    // Hash password for auth
     const hashed = await bcrypt.hash(password, 10);
-
-    // Optional encrypted plain_password for admin (non-fatal if null)
-    const encrypted = tryEncrypt(password); // can be null
+    const encrypted = tryEncrypt(password);
 
     const created = await User.create({
       username,
@@ -57,7 +56,6 @@ exports.register = async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Registration Error:', err);
-    // Sequelize validation / unique errors
     if (err.name === 'SequelizeValidationError' || err.name === 'SequelizeUniqueConstraintError') {
       const messages = (err.errors || []).map(e => e.message);
       return res.status(400).json({ message: messages.join(', ') || 'Validation error' });
@@ -69,12 +67,17 @@ exports.register = async (req, res) => {
 // ✅ POST /api/auth/login
 exports.login = async (req, res) => {
   try {
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({ message: 'Invalid request body' });
+    }
+
     let { email, password } = req.body || {};
+    email = email ? String(email).trim().toLowerCase() : '';
+    password = password ? String(password) : '';
+
     if (!email || !password) {
       return res.status(400).json({ message: 'Email and password are required' });
     }
-
-    email = String(email).trim().toLowerCase();
 
     const user = await User.findOne({ where: { email } });
     if (!user) return res.status(401).json({ message: 'Invalid credentials' });

@@ -1,10 +1,17 @@
-// ✅ Replaced uploadDocuments to support truncation strategy
-
+// backend/controllers/docController.js
 const extractUtil = require('../utils/extractUtil');
 const { queryLocalAI } = require('../utils/aiClient');
 const Document = require('../models/document');
 const { Chat } = require('../models');
+const DocumentChunk = require('../models/documentChunk');
+const config = require('../config/retrievalConfig');
 
+const {
+  chunkTextBySize,
+  tokenize
+} = require('../utils/simpleTextSimilarity');
+
+// ==================== UPLOAD DOCUMENTS ====================
 const uploadDocuments = async (req, res) => {
   try {
     const userId = req.user?.userId;
@@ -13,7 +20,6 @@ const uploadDocuments = async (req, res) => {
     if (!userId) {
       return res.status(401).json({ message: 'User ID missing from token' });
     }
-
     if (!files || files.length === 0) {
       return res.status(400).json({ message: 'No files uploaded' });
     }
@@ -23,8 +29,6 @@ const uploadDocuments = async (req, res) => {
     for (const file of files) {
       try {
         const extractedText = await extractUtil.extractTextFromFile(file.path);
-
-        // ✅ Truncate to 100k characters (Option A)
         const truncatedText = extractedText?.substring(0, 100000) || '';
 
         const newDoc = await Document.create({
@@ -34,8 +38,23 @@ const uploadDocuments = async (req, res) => {
           uploaded_at: new Date(),
           extracted_text: truncatedText,
         });
-
         uploadedDocs.push(newDoc);
+
+        // Pre-chunk and store chunks for faster retrieval on queries
+        try {
+          const pieces = chunkTextBySize(truncatedText || '', config.CHUNK_SIZE);
+          if (pieces && pieces.length > 0) {
+            const rows = pieces.map((p, idx) => ({
+              document_id: newDoc.id,
+              chunk_index: idx,
+              chunk_text: p,
+              token_count: tokenize(p).length || null,
+            }));
+            await DocumentChunk.bulkCreate(rows);
+          }
+        } catch (chunkErr) {
+          console.warn(`⚠ Failed to create chunks for ${file.originalname}:`, chunkErr.message || chunkErr);
+        }
 
       } catch (fileErr) {
         console.error(`❌ Error processing ${file.originalname}:`, fileErr);
@@ -47,12 +66,12 @@ const uploadDocuments = async (req, res) => {
     }
 
     return res.status(201).json({
-      message: uploadedDocs.length === files.length
-        ? '✅ All files uploaded successfully'
-        : `⚠️ Only ${uploadedDocs.length} of ${files.length} files uploaded.`,
+      message:
+        uploadedDocs.length === files.length
+          ? '✅ All files uploaded successfully'
+          : `⚠️ Only ${uploadedDocs.length} of ${files.length} files uploaded.`,
       files: uploadedDocs,
     });
-
   } catch (err) {
     console.error('❌ Upload Controller Error:', err.stack);
     res.status(500).json({
@@ -62,68 +81,83 @@ const uploadDocuments = async (req, res) => {
   }
 };
 
+// ==================== ASK QUESTION ====================
 const askQuestion = async (req, res) => {
   try {
-    const { question, documentIds } = req.body;
+    const { question } = req.body || {};
     const userId = req.user?.userId;
 
     if (!userId) {
       return res.status(401).json({ message: 'Missing user ID in token' });
     }
-
     if (!question || typeof question !== 'string') {
       return res.status(400).json({ message: 'Question must be provided as a string' });
     }
 
-    // ✅ Prefer context from relevanceGuard if available
-    let combinedText = req.docContext;
-    let usedDocuments = req.usedDocuments || [];
-    let documents = [];
+    // must be set by relevanceGuard
+    const combinedText = (req.docContext || '').trim();
+    const usedDocuments = Array.isArray(req.usedDocuments) ? req.usedDocuments : [];
 
-    // If relevanceGuard didn't set docContext, fallback to fetching from DB
+    // If no context was retrieved, don't let the model hallucinate.
     if (!combinedText) {
-      const whereClause = (documentIds && Array.isArray(documentIds) && documentIds.length > 0)
-        ? { id: documentIds, uploaded_by: userId }
-        : { uploaded_by: userId };
-
-      documents = await Document.findAll({ where: whereClause, order: [['uploaded_at', 'DESC']] });
-
-
-      if (!documents || documents.length === 0) {
-        return res.status(404).json({ message: 'No documents found for this user' });
-      }
-
-      combinedText = documents.map(doc => doc.extracted_text || '').join('\n').trim();
-      usedDocuments = documents.map(doc => doc.filename);
+      return res.status(200).json({
+        answer: 'No relevant information found in the uploaded documents.'
+      });
     }
 
-    if (!combinedText || combinedText.length === 0) {
-      return res.status(400).json({ message: 'Extracted text is empty for all documents' });
+    // Finance-aware hint (light touch)
+    const financeKeywords = ['revenue', 'profit', 'balance', 'asset', 'liability', 'forecast', 'q1', 'q2', 'q3', 'q4', 'fiscal', 'financial', 'income', 'cashflow'];
+    const financeDetected = financeKeywords.some(k => question.toLowerCase().includes(k)) ||
+      usedDocuments.some(fn => financeKeywords.some(k => fn.toLowerCase().includes(k)));
+
+    // Strict grounding instruction prevents biryani/hallucinations
+    let instruction =
+      `You MUST answer using ONLY the provided document excerpts below. ` +
+      `If the excerpts do not contain the explicit answer, respond exactly:\n` +
+      `"No relevant information found in the uploaded documents." ` +
+      `Do NOT use outside knowledge or guess. Cite nothing beyond the provided excerpts. stick to the facts. ` +
+      `If the question is not answerable from the documents, return that exact phrase. Confind to the uploaded documents, seleced documents, and their excerpts. ` +
+      `If the question is about a specific document, use the filename as context. `;;
+
+    if (financeDetected) {
+      instruction += ' Provide concise analysis, state assumptions clearly, and do not invent numbers. Analyse the data strictly based on the provided documents. Predict future trends only if explicitly supported by the documents.';
     }
 
-    // Ambiguity flag from relevanceGuard
-    if (req.relevanceAmbiguous) {
-      console.log('⚠ Ambiguous relevance detected — merged top docs for context.');
-    }
+    const prompt = `${instruction}
 
-    // 🔹 This part kept exactly as your original logging
+Context:
+${combinedText}
+
+Question:
+${question}
+
+Answer:`;
+
     console.log('📤 Sending to AI model...');
-    console.log('📜 Text length:', combinedText.length);
+    console.log('📜 Context length:', combinedText.length);
+    console.log('🗂️ Sources:', usedDocuments);
     console.log('❓ Question:', question);
 
-    const answer = await queryLocalAI(question, combinedText);
+    // Send the fully-formed prompt
+    const answer = await queryLocalAI(question, prompt);
 
     if (!answer || typeof answer !== 'string') {
       return res.status(500).json({ message: 'AI did not return a valid string answer' });
     }
 
-    // Append disclaimer & sources for storage
-    const disclaimer = '\n\n---\nAnswer is based only on the provided documents. If unsure, consult the original documents.';
-    const answerWithSources = `${answer}${disclaimer}\n\nSources: ${usedDocuments.join(', ')}`;
+    // Ensure we don't accidentally pass through a non-grounded answer
+    const cleaned = answer.trim();
+    let finalAnswer = cleaned;
+    if (!cleaned || /^no relevant information/i.test(cleaned)) {
+      finalAnswer = 'No relevant information found in the uploaded documents.';
+    }
+
+    const disclaimer = '\n\n---\nAnswer is based only on the provided documents.';
+    const answerWithSources = `${finalAnswer}${disclaimer}\n\nSources: ${usedDocuments.join(', ')}`;
 
     await Chat.create({
       question,
-      answer: answerWithSources, // save the annotated version
+      answer: answerWithSources,
       user_id: userId,
       used_documents: usedDocuments.join(', '),
       asked_at: new Date(),
@@ -131,8 +165,8 @@ const askQuestion = async (req, res) => {
 
     return res.status(200).json({
       question,
-      answer,               // return plain answer for UI
-      answerWithSources,    // annotated version if needed
+      answer: finalAnswer,
+      answerWithSources,
       usedDocuments,
     });
 
@@ -141,14 +175,11 @@ const askQuestion = async (req, res) => {
     return res.status(500).json({
       message: 'Error processing the question.',
       error: err.message,
-      stack: err.stack,
     });
   }
 };
 
-
-
-
+// ==================== CHAT HISTORY ====================
 const getChatHistory = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -168,7 +199,6 @@ const getChatHistory = async (req, res) => {
   }
 };
 
-// ✅ FINAL EXPORT
 module.exports = {
   uploadDocuments,
   askQuestion,

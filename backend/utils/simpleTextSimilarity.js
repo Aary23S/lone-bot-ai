@@ -1,110 +1,142 @@
 // backend/utils/simpleTextSimilarity.js
-// Hybrid simple similarity utilities: tokenization, keyword density and normalized overlap.
-// Designed to be cheap (no external calls) and robust across small and large docs.
+// Combines your cosine+overlap with an optional keyword bonus
 
 const STOPWORDS = new Set([
-  'the','is','at','which','on','and','a','an','of','or','to','in','for','with','that','this','it','be','are','by','from','as','was','were','will','can'
+  'the','is','at','which','on','and','a','an','of','or','to','in','for','with','that','this','it','be','are',
+  'as','by','from','was','were','will','would','can','could','should','has','have','had','i','you','he','she','they','we','our','my','your'
 ]);
 
 function tokenize(text) {
-  if (!text) return [];
+  if (!text || typeof text !== 'string') return [];
   return text
-    .toString()
     .toLowerCase()
-    .replace(/[\u2018\u2019\u201C\u201D]/g, "'")
-    .replace(/[^a-z0-9\s']/g, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
-    .filter(t => t && !STOPWORDS.has(t));
+    .filter(tok => tok && !STOPWORDS.has(tok) && tok.length > 1);
 }
 
-// term frequency map
-function tfMap(tokens) {
-  const m = Object.create(null);
-  for (const t of tokens) m[t] = (m[t] || 0) + 1;
-  return m;
+function termFreqMap(tokens) {
+  const map = Object.create(null);
+  for (const t of tokens) map[t] = (map[t] || 0) + 1;
+  return map;
 }
 
-// dot product / magnitude helpers
 function dotProduct(a, b) {
   let sum = 0;
-  for (const k of Object.keys(a)) if (b[k]) sum += a[k] * b[k];
+  for (const k of Object.keys(a)) {
+    if (b[k]) sum += a[k] * b[k];
+  }
   return sum;
 }
-function magnitude(a) {
-  let s = 0;
-  for (const k of Object.keys(a)) s += a[k] * a[k];
-  return Math.sqrt(s);
+
+function magnitude(map) {
+  let sum = 0;
+  for (const k of Object.keys(map)) sum += map[k] * map[k];
+  return Math.sqrt(sum);
 }
 
-// cosine similarity on token TF vectors
-function cosineSimilarity(textA, textB) {
-  const ta = tokenize(textA);
-  const tb = tokenize(textB);
-  if (ta.length === 0 || tb.length === 0) return 0;
-  const ma = tfMap(ta);
-  const mb = tfMap(tb);
-  const denom = magnitude(ma) * magnitude(mb);
-  if (!denom) return 0;
-  return dotProduct(ma, mb) / denom;
-}
+function similarityScore(textA, textB) {
+  try {
+    const tA = tokenize(textA);
+    const tB = tokenize(textB);
+    if (tA.length === 0 || tB.length === 0) return 0;
 
-// keyword-density score: overlapCount / docTokenCount
-function keywordDensityScore(query, docText) {
-  const qTokens = tokenize(query);
-  if (qTokens.length === 0) return 0;
-  const docTokens = tokenize(docText);
-  if (docTokens.length === 0) return 0;
-  const qSet = new Set(qTokens);
-  let overlap = 0;
-  for (const t of docTokens) if (qSet.has(t)) overlap++;
-  // density normalized by sqrt(length) to avoid huge docs dominating
-  return overlap / Math.sqrt(Math.max(1, docTokens.length));
-}
+    const keepTop = (tokens, maxTypes = 700) => {
+      const tf = termFreqMap(tokens);
+      const entries = Object.entries(tf).sort((a, b) => b[1] - a[1]);
+      return Object.fromEntries(entries.slice(0, maxTypes));
+    };
 
-/*
- * chunkScore:
- *  - computes a hybrid score for a query vs a text chunk
- *  - weights: cosineSimilarity (0.6), keywordDensity (0.4)
- *  - returns a number between 0 and 1 (approximately)
- */
-function chunkScore(query, chunkText) {
-  const cos = cosineSimilarity(query, chunkText);
-  const kd = keywordDensityScore(query, chunkText);
-  // combine with weights, apply small normalization
-  return (0.6 * cos) + (0.4 * Math.min(1, kd));
-}
+    const mapA = keepTop(tA, 700);
+    const mapB = keepTop(tB, 700);
 
-// chunk splitting helper: split text into chunks of approx chunkSize chars (natural split at newlines)
-function chunkTextBySize(text, chunkSize = 4000) {
-  if (!text) return [];
-  text = text.toString();
-  const paragraphs = text.split(/\n+/).map(p => p.trim()).filter(Boolean);
-  const chunks = [];
-  let buffer = '';
-  for (const p of paragraphs) {
-    if ((buffer + '\n' + p).length > chunkSize) {
-      if (buffer) chunks.push(buffer);
-      // if paragraph itself > chunkSize, slice it
-      if (p.length > chunkSize) {
-        for (let i = 0; i < p.length; i += chunkSize) {
-          chunks.push(p.slice(i, i + chunkSize));
-        }
-        buffer = '';
-      } else {
-        buffer = p;
-      }
-    } else {
-      buffer = buffer ? (buffer + '\n' + p) : p;
-    }
+    const denom = magnitude(mapA) * magnitude(mapB);
+    if (!denom) return 0;
+    return dotProduct(mapA, mapB) / denom;
+  } catch (err) {
+    console.error('similarityScore error:', err);
+    return 0;
   }
-  if (buffer) chunks.push(buffer);
-  return chunks;
+}
+
+function chunkTextBySize(text, maxChunkSize = 1000, overlap = 200) {
+  if (!text || typeof text !== 'string') return [];
+  text = text.trim();
+  if (text.length === 0) return [];
+
+  maxChunkSize = Math.max(200, Number(maxChunkSize) || 1000);
+  overlap = Math.max(0, Number(overlap) || 200);
+
+  if (text.length <= maxChunkSize) return [text];
+
+  const sentences = text.split(/(?<=[.?!])\s+|\n+/).map(s => s.trim()).filter(Boolean);
+
+  const chunks = [];
+  let current = '';
+
+  for (const s of sentences) {
+    if (!s) continue;
+    if ((current.length ? current.length + 1 + s.length : s.length) <= maxChunkSize) {
+      current = (current ? current + ' ' + s : s);
+      continue;
+    }
+    if (current) {
+      chunks.push(current.trim());
+      current = '';
+    }
+    if (s.length > maxChunkSize) {
+      let start = 0;
+      while (start < s.length) {
+        const end = Math.min(start + maxChunkSize, s.length);
+        chunks.push(s.slice(start, end));
+        if (end === s.length) break;
+        start = Math.max(0, end - overlap);
+      }
+      continue;
+    }
+    current = s;
+  }
+
+  if (current) chunks.push(current.trim());
+
+  return chunks.filter(ch => ch && ch.length > 0);
+}
+
+function keywordBonus(qTokens, textLower) {
+  let bonus = 0;
+  for (const t of qTokens) {
+    if (t.length >= 5 && textLower.includes(t)) bonus += 0.005;
+  }
+  return Math.min(bonus, 0.05);
+}
+
+function chunkScore(question, chunk) {
+  try {
+    const sim = similarityScore(question, chunk);
+    const qTokens = tokenize(question);
+    const cTokens = tokenize(chunk);
+
+    let overlapScore = 0;
+    if (qTokens.length > 0 && cTokens.length > 0) {
+      const qSet = new Set(qTokens);
+      let overlap = 0;
+      for (const t of cTokens) if (qSet.has(t)) overlap++;
+      overlapScore = overlap / Math.min(qTokens.length, 50);
+      overlapScore = Math.min(1, overlapScore);
+    }
+
+    const bonus = keywordBonus(qTokens, (chunk || '').toLowerCase());
+
+    const combined = (sim * 0.7) + (overlapScore * 0.25) + bonus;
+    return Math.max(0, Math.min(1, Number(combined) || 0));
+  } catch (err) {
+    return 0;
+  }
 }
 
 module.exports = {
-  tokenize,
-  cosineSimilarity,
-  keywordDensityScore,
+  chunkTextBySize,
   chunkScore,
-  chunkTextBySize
+  tokenize,
+  similarityScore
 };

@@ -1,14 +1,15 @@
+// frontend/js/app.js
 const API = 'http://localhost:5000/api'; // base API
 const loader = document.getElementById('loader');
 
-// Globals for document selection
-let allDocs = [];    // all docs fetched from backend
-let uniqueDocs = []; // unique filenames with first doc id
+// Globals
+let docsMapByFilename = {};
+let selectedDocIds = [];
 
-// Loader control
+// Loader control (toggle CSS 'visible' class)
 function showLoader(show = true) {
   if (!loader) return;
-  loader.style.display = show ? 'block' : 'none';
+  loader.classList.toggle('visible', !!show);
 }
 
 // Section switcher
@@ -41,7 +42,6 @@ function updateUserInfo() {
 }
 
 // ---------- Auth ----------
-
 async function register() {
   const username = document.getElementById('regUsername')?.value.trim();
   const email = document.getElementById('regEmail')?.value.trim();
@@ -102,7 +102,6 @@ async function login() {
 }
 
 // ---------- File upload ----------
-
 const fileInput = document.getElementById('documents');
 const fileList = document.getElementById('fileList');
 
@@ -124,8 +123,8 @@ function handleFileSelect(e) {
       `;
       const btn = node.querySelector('.remove-file-btn');
       btn.addEventListener('click', () => {
-        // Remove entire file input (simpler approach)
         node.remove();
+        // Clear the input (simple approach)
         fileInput.value = '';
         if (fileList.children.length === 0) fileList.classList.add('hidden');
       });
@@ -158,9 +157,7 @@ async function uploadFiles() {
     fileInput.value = '';
     if (fileList) fileList.classList.add('hidden');
 
-    // After successful upload, go to chat and load docs
     loadChatSection();
-
   } catch (err) {
     console.error('Upload error:', err);
     alert(err.message || 'Upload failed. Please try again.');
@@ -169,75 +166,89 @@ async function uploadFiles() {
   }
 }
 
-// ---------- Chat ----------
-
-const toggleDocSelectBtn = document.getElementById('toggleDocSelectBtn');
-const docListContainer = document.getElementById('docListContainer');
-const docCheckboxes = document.getElementById('docCheckboxes');
-const selectAllDocsCheckbox = document.getElementById('selectAllDocs');
-
-if (toggleDocSelectBtn) {
-  toggleDocSelectBtn.addEventListener('click', () => {
-    if (!docListContainer) return;
-    const isHidden = docListContainer.classList.contains('hidden');
-    if (isHidden) {
-      docListContainer.classList.remove('hidden');
-      toggleDocSelectBtn.textContent = 'Select Documents ▲';
-    } else {
-      docListContainer.classList.add('hidden');
-      toggleDocSelectBtn.textContent = 'Select Documents ▼';
-    }
-  });
-}
-
-function toggleAllCheckboxes(checked) {
-  if (!docCheckboxes) return;
-  docCheckboxes.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-    cb.checked = checked;
-  });
-}
-
-//error may happend here
-async function fetchAndRenderDocs() {
-  if (!docCheckboxes) return;
-
+// ---------- Fetch docs ----------
+async function fetchDocs() {
+  const token = localStorage.getItem('token');
+  if (!token) return;
   try {
     const res = await fetch(`${API}/upload/docs`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      headers: { Authorization: `Bearer ${token}` }
     });
-    if (!res.ok) throw new Error('Failed to fetch documents');
+    if (!res.ok) return;
     const docs = await res.json();
 
-    allDocs = docs || [];
-
-    // Unique filenames, keep first doc id per filename
-    const map = new Map();
-    allDocs.forEach(doc => {
-      if (!map.has(doc.filename)) map.set(doc.filename, doc.id);
-    });
-    uniqueDocs = Array.from(map.entries()).map(([filename, id]) => ({ filename, id }));
-
-    // Render checkboxes
-    docCheckboxes.innerHTML = '';
-    uniqueDocs.forEach(({ filename, id }) => {
-      const label = document.createElement('label');
-      label.innerHTML = `<input type="checkbox" value="${id}" /> ${filename}`;
-      docCheckboxes.appendChild(label);
+    docsMapByFilename = {};
+    docs.forEach(d => {
+      const key = d.filename;
+      // keep the most recent by uploaded_at
+      if (!docsMapByFilename[key] || new Date(d.uploaded_at) > new Date(docsMapByFilename[key].uploaded_at)) {
+        docsMapByFilename[key] = d;
+      }
     });
 
-    // Setup Select All toggle
-    if (selectAllDocsCheckbox) {
-      selectAllDocsCheckbox.checked = true;
-      toggleAllCheckboxes(true);
-      selectAllDocsCheckbox.addEventListener('change', (e) => {
-        toggleAllCheckboxes(e.target.checked);
-      });
-    }
+    renderDocs(Object.values(docsMapByFilename));
   } catch (err) {
-    console.error('Error fetching docs:', err);
+    console.error('Failed to fetch docs:', err);
   }
 }
 
+function renderDocs(docs) {
+  const container = document.getElementById('docCheckboxes');
+  const selectAllCheckbox = document.getElementById('selectAllDocs');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!docs || docs.length === 0) {
+    container.innerHTML = '<div class="text-secondary">No documents uploaded yet.</div>';
+    return;
+  }
+
+  docs.forEach(d => {
+    const label = document.createElement('label');
+    label.style.display = 'block';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.value = d.id;             // IMPORTANT: set value so later we collect .value
+    chk.dataset.id = d.id;
+    chk.addEventListener('change', (e) => {
+      const id = e.target.value;
+      if (e.target.checked) {
+        if (!selectedDocIds.includes(id)) selectedDocIds.push(id);
+      } else {
+        selectedDocIds = selectedDocIds.filter(x => x !== id);
+      }
+    });
+    label.appendChild(chk);
+    label.appendChild(document.createTextNode(' ' + d.filename));
+    container.appendChild(label);
+  });
+
+  if (selectAllCheckbox) {
+    selectAllCheckbox.checked = false;
+    selectAllCheckbox.addEventListener('change', function () {
+      const allChecks = container.querySelectorAll('input[type="checkbox"]');
+      selectedDocIds = [];
+      allChecks.forEach(chk => {
+        chk.checked = this.checked;
+        if (this.checked) selectedDocIds.push(chk.value);
+      });
+    });
+  }
+}
+
+// ---------- Toggle doc list ----------
+document.addEventListener('click', (e) => {
+  if (e.target && e.target.id === 'toggleDocSelectBtn') {
+    const list = document.getElementById('docListContainer');
+    if (!list) return;
+    list.classList.toggle('hidden');
+    e.target.textContent = list.classList.contains('hidden')
+      ? 'Select Documents ▼'
+      : 'Select Documents ▲';
+  }
+});
+
+// ---------- Chat helpers ----------
 function addMessageToChat(message, type = 'ai') {
   const cb = document.getElementById('chatBox');
   if (!cb) return;
@@ -251,42 +262,40 @@ function addMessageToChat(message, type = 'ai') {
 async function askQuestion() {
   const questionInput = document.getElementById('questionInput');
   if (!questionInput) return;
+
   const q = questionInput.value.trim();
   if (!q) return;
+
   addMessageToChat(q, 'user');
   questionInput.value = '';
 
-  // Gather selected docs from checkbox
-  let selectedDocIds = [];
-  if (docCheckboxes) {
-    docCheckboxes.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
-      selectedDocIds.push(cb.value);
-    });
+  // Collect checked doc IDs
+  let chosen = [];
+  const checkboxesContainer = document.getElementById('docCheckboxes');
+  if (checkboxesContainer) {
+    checkboxesContainer.querySelectorAll('input[type="checkbox"]:checked')
+      .forEach(cb => chosen.push(cb.value));
   }
 
-  // If all or none selected, send no documentIds (backend treats as all docs)
-  if (selectedDocIds.length === 0 || selectedDocIds.length === uniqueDocs.length) {
-    selectedDocIds = undefined;
-  }
+  // if no docs selected, send undefined so backend uses all docs
+  if (chosen.length === 0) chosen = undefined;
 
   showLoader(true);
   try {
-    const bodyPayload = selectedDocIds
-      ? { question: q, documentIds: selectedDocIds }
-      : { question: q };
-
+    const payload = chosen ? { question: q, documentIds: chosen } : { question: q };
     const res = await fetch(`${API}/upload/ask`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${localStorage.getItem('token')}`
       },
-      body: JSON.stringify(bodyPayload)
+      body: JSON.stringify(payload)
     });
+
     const data = await res.json();
-    addMessageToChat(data.answer || 'No response from AI.', 'ai');
+    addMessageToChat(data.answer || data.message || 'No response from AI.', 'ai');
   } catch (err) {
-    console.error('Ask error:', err);
+    console.error('❌ Ask error:', err);
     addMessageToChat('Error: Could not get a response.', 'ai');
   } finally {
     showLoader(false);
@@ -303,13 +312,10 @@ async function loadChatHistory() {
       headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
     });
     if (!res.ok) {
-      console.error('Failed to fetch history');
       addMessageToChat('Could not retrieve chat history.', 'ai');
       return;
     }
     const data = await res.json();
-
-    // support both shapes: array or { user, history: [...] }
     const items = Array.isArray(data) ? data : (data.history || []);
     if (items.length === 0) {
       addMessageToChat('No previous chat history found.', 'ai');
@@ -318,8 +324,6 @@ async function loadChatHistory() {
         if (item.question && item.answer) {
           addMessageToChat(item.question, 'user');
           addMessageToChat(item.answer, 'ai');
-        } else if (item.role && item.content) {
-          addMessageToChat(item.content, item.role === 'user' ? 'user' : 'ai');
         } else if (item.content) {
           addMessageToChat(item.content, 'ai');
         } else {
@@ -337,7 +341,6 @@ async function loadChatHistory() {
 
 function loadChatSection() {
   goToChat();
-  fetchAndRenderDocs();
   loadChatHistory();
 }
 
@@ -346,12 +349,11 @@ function goToChat() {
   const cb = document.getElementById('chatBox');
   if (cb) cb.innerHTML = '';
   addMessageToChat('New chat session started. Ask me anything about your documents.', 'ai');
-  fetchAndRenderDocs();
+  fetchDocs();
   loadChatHistory();
 }
 
-// ---------- UX helpers ----------
-
+// UX helpers
 const textarea = document.getElementById('questionInput');
 if (textarea) {
   textarea.addEventListener('input', function() {
@@ -360,7 +362,7 @@ if (textarea) {
   });
 }
 
-// Enter key handling for actions
+// Enter-key handling for submit (no Shift)
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     const active = document.querySelector('.section.visible');
@@ -375,12 +377,53 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
-// Init
-window.addEventListener('DOMContentLoaded', () => {
+// Attach form submit handlers
+document.addEventListener('DOMContentLoaded', () => {
   updateUserInfo();
+
+  const registerForm = document.getElementById('registerForm');
+  if (registerForm) {
+    registerForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      register();
+    });
+  }
+
+  const loginForm = document.getElementById('loginForm');
+  if (loginForm) {
+    loginForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      login();
+    });
+  }
+
   if (localStorage.getItem('token')) {
     showSection('uploadSection');
   } else {
     showSection('registerSection');
   }
 });
+
+document.getElementById('clearHistoryBtn').addEventListener('click', async () => {
+  if (!confirm('Are you sure you want to clear all your previous chat history?')) return;
+
+  try {
+    const token = localStorage.getItem('token');
+    const res = await fetch('http://localhost:5000/api/upload/history', {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    const data = await res.json();
+    alert(data.message);
+
+    // Clear chat window UI after deletion
+    document.getElementById('chatWindow').innerHTML = '';
+  } catch (err) {
+    console.error('Error clearing history:', err);
+    alert('Failed to clear history.');
+  }
+});
+
