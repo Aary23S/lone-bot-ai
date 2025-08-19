@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Lone Bot AI - Professional Document Intelligence</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="icon" type="image/x-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232563eb'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z'/%3E%3C/svg%3E" />
+</head>
+<body>
+  <header class="header">
+    <div class="header-content">
+      <h1 class="logo">Lone Bot AI</h1>
+      <div id="userInfo" class="hidden">
+        <span id="userEmail" class="text-secondary"></span>
+        <button onclick="logout()" class="btn btn-danger">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <div id="loader" class="loader">
+      <div class="spinner"></div>
+    </div>
+
+    <!-- Registration Section -->
+    <section id="registerSection" class="section visible">
+      <div class="card auth-card">
+        <h2 class="text-center mb-3">Create Your Account</h2>
+        <form id="registerForm">
+          <div class="form-group">
+            <label class="form-label">Username</label>
+            <input type="text" id="regUsername" class="form-input" placeholder="Enter your username" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" id="regEmail" class="form-input" placeholder="Enter your email" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" id="regPassword" class="form-input" placeholder="Create a strong password" required />
+          </div>
+          <div class="btn-group">
+            <button type="submit" class="btn btn-primary">Create Account</button>
+            <button type="button" class="btn btn-secondary" onclick="showSection('loginSection')">Already have an account? Sign In</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Login Section -->
+    <section id="loginSection" class="section">
+      <div class="card auth-card">
+        <h2 class="text-center mb-3">Welcome Back</h2>
+        <form id="loginForm">
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" id="loginEmail" class="form-input" placeholder="Enter your email" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" id="loginPassword" class="form-input" placeholder="Enter your password" required />
+          </div>
+          <div class="btn-group">
+            <button type="submit" class="btn btn-primary">Sign In</button>
+            <button type="button" class="btn btn-secondary" onclick="showSection('registerSection')">Create New Account</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Upload Section -->
+    <section id="uploadSection" class="section">
+      <div class="card">
+        <h2 class="mb-3">Upload Documents</h2>
+        <p class="text-secondary mb-3">Upload your documents to start chatting with AI about their content</p>
+        
+        <div class="file-upload">
+          <label for="documents" class="file-upload-label" tabindex="0" role="button" aria-label="Upload documents">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span class="mt-2">Drop files here or click to browse</span>
+          </label>
+          <input type="file" id="documents" class="file-upload-input" multiple accept=".pdf,.doc,.docx,.txt,.md" />
+        </div>
+
+        <div id="fileList" class="file-list hidden"></div>
+
+        <div class="btn-group mt-3">
+          <button onclick="uploadFiles()" class="btn btn-primary">Upload Documents</button>
+          <button onclick="goToChat()" class="btn btn-secondary">Go to Chat</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Chat Section -->
+    <section id="chatSection" class="section">
+      <div class="card">
+        <h2 class="mb-3">Chat with AI</h2>
+        <div class="doc-selection-panel">
+          <button id="toggleDocSelectBtn" class="btn btn-secondary btn-sm" type="button">
+            Select Documents ▼
+          </button>
+          <div id="docListContainer" class="doc-list-container hidden">
+            <label><input type="checkbox" id="selectAllDocs" /> Select All</label>
+            <div id="docCheckboxes" class="doc-checkboxes"></div>
+          </div>
+        </div>
+
+        <div class="chat-container">
+          <div class="chat-header">
+            <p class="text-secondary">Ask questions about your uploaded documents</p>
+            <button id="clearHistoryBtn" class="clear-history-btn">Clear History</button>
+          </div>
+          <div id="chatBox" class="chat-messages"></div>
+          <div class="chat-input-container">
+            <textarea id="questionInput" class="chat-input" placeholder="Type your question here..." rows="1"></textarea>
+            <button id="sendBtn" onclick="askQuestion()" class="btn btn-primary">Send</button>
+          </div>
+        </div>
+        <div class="btn-group mt-3">
+          <button onclick="showSection('uploadSection')" class="btn btn-secondary">Back to Upload</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
