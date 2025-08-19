@@ -12,7 +12,7 @@
     <div class="header-content">
       <h1 class="logo">Lone Bot AI</h1>
       <div id="userInfo" class="hidden">
-        <span id="userEmail" class="text-secondary email-badge"></span>
+        <span id="userEmail" class="text-secondary"></span>
         <button onclick="logout()" class="btn btn-danger">Logout</button>
       </div>
     </div>
@@ -99,11 +99,7 @@
     <!-- Chat Section -->
     <section id="chatSection" class="section">
       <div class="card">
-        <div class="chat-header">
-          <h2 class="mb-3">Chat with AI</h2>
-          <button id="clearHistoryBtn" class="btn btn-danger btn-sm">🗑 Clear Chat</button>
-        </div>
-
+        <h2 class="mb-3">Chat with AI</h2>
         <div class="doc-selection-panel">
           <button id="toggleDocSelectBtn" class="btn btn-secondary btn-sm" type="button">
             Select Documents ▼
@@ -115,16 +111,16 @@
         </div>
 
         <div class="chat-container">
-          <div class="chat-subheader">
+          <div class="chat-header">
             <p class="text-secondary">Ask questions about your uploaded documents</p>
+            <button id="clearHistoryBtn" class="clear-history-btn">Clear History</button>
           </div>
           <div id="chatBox" class="chat-messages"></div>
           <div class="chat-input-container">
-            <textarea id="questionInput" class="chat-input dynamic-textarea" placeholder="Type your question here..." rows="1"></textarea>
-            <button id="sendBtn" onclick="askQuestion()" class="btn btn-primary" >Send</button>
+            <textarea id="questionInput" class="chat-input" placeholder="Type your question here..." rows="1"></textarea>
+            <button id="sendBtn" onclick="askQuestion()" class="btn btn-primary">Send</button>
           </div>
         </div>
-
         <div class="btn-group mt-3">
           <button onclick="showSection('uploadSection')" class="btn btn-secondary">Back to Upload</button>
         </div>

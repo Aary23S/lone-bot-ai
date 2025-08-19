@@ -145,15 +145,19 @@ async function uploadFiles() {
 
   showLoader(true);
   try {
+    // console.log('1')
     const res = await fetch(`${API}/upload`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       body: formData
     });
-
+    // console.log('2')
+    
     const data = await res.json();
+    // console.log('3')
     if (!res.ok) throw new Error(data.message || 'Upload failed');
-
+    
+    // console.log('4')
     alert(data.message || 'Upload successful');
     fileInput.value = '';
     if (fileList) fileList.classList.add('hidden');

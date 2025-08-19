@@ -485,3 +485,51 @@ body {
   font-size: 1rem;
   line-height: 1.4;
 }
+/* Narrower and centered auth forms */
+.auth-card {
+  max-width: 420px;
+  margin: 2rem auto;
+  padding: 2rem;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Make user email badge look professional */
+#userEmail {
+  display: inline-block;
+  padding: 0.4rem 0.75rem;
+  margin-right: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  background-color: rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius);
+  color: white;
+}
+
+/* Dynamic textarea for chat input */
+.chat-input {
+  flex: 1;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  resize: none;
+  font-family: inherit;
+  min-height: 44px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Clear history button positioning in chat header */
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Disable send button look */
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
