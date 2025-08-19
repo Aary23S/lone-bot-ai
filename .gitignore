@@ -1,0 +1,3 @@
+# .gitignore
+backend/uploads/
+git-filter-repo/
