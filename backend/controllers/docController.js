@@ -204,3 +204,64 @@ module.exports = {
   askQuestion,
   getChatHistory,
 };
+
+/**
+ * Module Importing
+
+Function: Brings in utilities, AI client, models, and configuration needed for document processing and querying.
+Way: Uses require() to import modules at the top of the file.
+Asynchronous Programming
+
+Function: Handles file uploads, database operations, and AI queries without blocking the server.
+Way: Declares controller functions as async and uses await for promises.
+RESTful API Design
+
+Function: Provides endpoints for uploading documents, asking questions, and retrieving chat history.
+Way: Defines controller functions (uploadDocuments, askQuestion, getChatHistory) for use in routes.
+User Authentication
+
+Function: Ensures only authenticated users can upload documents or ask questions.
+Way: Reads user ID from req.user (set by authentication middleware).
+File Handling
+
+Function: Processes uploaded files and extracts their text content.
+Way: Iterates over req.files, uses extractUtil.extractTextFromFile().
+Text Extraction and Chunking
+
+Function: Prepares documents for efficient retrieval and querying.
+Way: Extracts text, truncates it, splits into chunks (chunkTextBySize), tokenizes, and stores in the database.
+Database Interaction
+
+Function: Stores and retrieves documents, chunks, and chat history.
+Way: Uses Sequelize models (Document, DocumentChunk, Chat) for CRUD operations.
+Input Validation
+
+Function: Ensures requests contain all required and valid data.
+Way: Checks for presence and type of user ID, files, and question in requests.
+Error Handling
+
+Function: Responds to errors with appropriate status codes and messages.
+Way: Uses try-catch blocks and sends JSON error responses.
+AI Integration
+
+Function: Answers user questions based on uploaded documents.
+Way: Builds a prompt and sends it to the local AI model (queryLocalAI).
+Contextual Prompt Engineering
+
+Function: Guides the AI to answer strictly from provided document excerpts.
+Way: Constructs detailed instructions and context for the AI prompt.
+Finance Keyword Detection
+
+Function: Adjusts AI instructions for finance-related questions.
+Way: Checks for finance keywords in the question and document filenames.
+Response Formatting
+
+Function: Sends structured feedback to the client.
+Way: Uses res.status().json() to return status codes and JSON objects.
+Exporting Functions
+
+Function: Makes controller functions available for routing.
+Way: Exports the functions via module.exports.
+ * 
+ * 
+ */

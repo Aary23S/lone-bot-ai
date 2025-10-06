@@ -97,3 +97,46 @@ exports.login = async (req, res) => {
     return res.status(500).json({ message: 'Login failed' });
   }
 };
+
+/*
+Module Importing
+
+Function: Brings in external libraries and the user model needed for authentication.
+Way: Uses require() to import jsonwebtoken (for tokens), bcryptjs (for password hashing), crypto (for encryption), and the User model (for database operations).
+Environment Variables
+
+Function: Provides sensitive configuration values securely.
+Way: Accesses values like the encryption key and JWT secret from process.env, set via environment or .env files.
+Encryption (tryEncrypt function)
+
+Function: Optionally encrypts plain passwords for admin use.
+Way: Uses AES-256-CTR algorithm with a key from environment variables; returns encrypted string or null if encryption fails.
+Password Hashing
+
+Function: Secures user passwords before storing them.
+Way: Uses bcrypt.hash() to convert plain passwords into secure hashes.
+Database Interaction
+
+Function: Checks for existing users and creates new ones.
+Way: Uses Sequelize model methods (findOne, create) to query and insert user data.
+Input Validation
+
+Function: Ensures requests contain all required fields and valid data.
+Way: Checks the request body for presence and type of username, email, and password.
+Error Handling
+
+Function: Responds to errors with appropriate status codes and messages.
+Way: Uses try-catch blocks and inspects error types to send meaningful responses.
+JWT Token Generation
+
+Function: Issues authentication tokens for logged-in users.
+Way: Uses jwt.sign() to create a token containing the user ID, signed with a secret and expiration.
+RESTful API Design
+
+Function: Provides endpoints for registration and login.
+Way: Defines register and login as exported async functions for POST requests.
+Response Formatting
+
+Function: Sends structured feedback to the client.
+Way: Uses res.status().json() to return status codes and JSON objects with messages and user info.
+*/
